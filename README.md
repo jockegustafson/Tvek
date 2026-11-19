@@ -90,6 +90,11 @@ interviewer's long, statement-like question *certain* where the listener heard *
 tags; on 15 earlier face-to-face-dialogue utterances shown again without saying so, the same listener gave the same label 8 times, so the labels
 themselves are noisy, especially between *no claim* and *uncertain*. Treat single labels as estimates and look at the probabilities.
 
+## Report
+
+[docs/REPORT.md](docs/REPORT.md): the task, related work with references, the training data, the model, all results and what
+was tried, and the limitations.
+
 ## Licence
 
 Non-commercial research use only (see `LICENSE`). Please cite this repository. Questions: Joakim Gustafson, KTH Speech, Music and
