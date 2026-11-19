@@ -15,7 +15,8 @@ tvek interview.wav words.tsv --channel 0 -o certainty.tsv     # words of ONE spe
 start    end      label      p_certain  p_uncertain  p_no_claim  text
 ```
 
-One row per utterance (the words split at pauses of 0.8 s or more); `--json` adds the curve per word and the cues behind the label.
+One row per utterance (the words split at pauses of 0.8 s or more, and stretches over 40 words or 20 s at their longest pause);
+`--json` adds the curve per word and the cues behind the label.
 
 ## Run it from Python
 
@@ -62,9 +63,20 @@ past the last word, the final pitch slope). The model is **CertNet v3** of the K
 | **Tvek = CertNet + cue model** | **0.83** |
 
 Each tagging round added about 0.02; other audio encoders (self-supervised VoxRex, the KB-Whisper encoder, emotion dimensions) did not
-improve it. **Limits:** all tags are from one listener and from face-to-face conversation; the first tags on radio
-interviews are being collected, and the README will report how it does there. Uncertain is the hardest class to agree on even for
-people, so treat single labels as estimates and look at the probabilities.
+improve it.
+
+**Radio interviews** (never trained on): 120 utterances tagged by ear from Swedish radio interview programmes
+and a radio discussion programme, half where the model was least sure and half at random (2026-11-19):
+
+| Interview test | Items (certain / uncertain) | AUC certain vs uncertain (95 % bootstrap interval) |
+| --- | --- | --- |
+| all 120 | 73 (42 / 31) | **0.85** (0.75–0.93) |
+| the random half | 39 (22 / 17) | 0.91 (0.79–0.99) |
+
+Separating certain from uncertain carries over to interviews. The three-way label is weaker (50 % correct): the model often calls an
+interviewer's long, statement-like question *certain* where the listener heard *no claim* (24 of 120). **Limits:** one listener's
+tags; on 15 earlier face-to-face-dialogue utterances shown again without saying so, the same listener gave the same label 8 times, so the labels
+themselves are noisy, especially between *no claim* and *uncertain*. Treat single labels as estimates and look at the probabilities.
 
 ## Licence
 

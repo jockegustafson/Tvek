@@ -38,15 +38,25 @@ class CueModel:
         e = np.exp(z - z.max()); return e / e.sum()
 
 
+MAX_WORDS, MAX_S = 40, 20.0          # the training utterances: 3-40 words; longer stretches are split at their longest pause
+
+
+def _cap(u):
+    if len(u) <= MAX_WORDS and u[-1][1] - u[0][0] <= MAX_S or len(u) < 2: return [u]
+    k = max(range(1, len(u)), key=lambda i: u[i][0] - u[i - 1][1] - 1e-3 * abs(i - len(u) / 2))
+    return _cap(u[:k]) + _cap(u[k:])
+
+
 def split_utterances(words, gap=0.8):
-    """[(word, start, end)] -> [[(start, end, word)]]: words with letters or digits only, in time order, split at pauses >= gap s"""
+    """[(word, start, end)] -> [[(start, end, word)]]: words with letters or digits only, in time order, split at pauses >= gap s,
+    and stretches over 40 words or 20 s split again at their longest pause (as the transcription engine segments)"""
     ws = sorted((float(s), float(e), str(w)) for w, s, e in words if w and re.search(r"\w", str(w)) and float(e) > float(s))
     out, cur = [], []
     for x in ws:
         if cur and x[0] - cur[-1][1] >= gap: out.append(cur); cur = []
         cur.append(x)
     if cur: out.append(cur)
-    return out
+    return [p for u in out for p in _cap(u)]
 
 
 def load_audio(path, channel=None):
