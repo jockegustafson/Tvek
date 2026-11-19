@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tvek Certainty Demo</title>
+<style>
+:root{--bg:#f6f5f2;--panel:#fff;--fg:#1d1d1f;--muted:#6b6b70;--line:#d9d7d2;--btn:#1d1d1f;--btnfg:#fff;
+ --cert:#15803d;--unc:#c2410c;--nc:#7c7c86;--curve:#c2410c;--curve2:#15803d;color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121214;--panel:#1b1b1f;--fg:#ececef;--muted:#9a9aa2;--line:#2e2e34;--btn:#ececef;--btnfg:#121214;
+ --cert:#4ade80;--unc:#fb923c;--nc:#a1a1aa;--curve:#fb923c;--curve2:#4ade80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121214;--panel:#1b1b1f;--fg:#ececef;--muted:#9a9aa2;--line:#2e2e34;--btn:#ececef;--btnfg:#121214;
+ --cert:#4ade80;--unc:#fb923c;--nc:#a1a1aa;--curve:#fb923c;--curve2:#4ade80;color-scheme:dark}
+html{scrollbar-gutter:stable}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:1200px;margin:0 auto;padding:20px 16px 40px;display:grid;gap:14px}
+h1{font-size:20px;margin:0;font-weight:650}h1 small{font-weight:400;color:var(--muted);font-size:13px;margin-left:8px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+button,.file{background:var(--btn);color:var(--btnfg);border:0;border-radius:7px;padding:7px 12px;font:inherit;cursor:pointer}
+button.rec{background:#dc2626;color:#fff}.file input{display:none}.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+label{color:var(--muted);display:flex;align-items:center;gap:6px}input[type=text]{width:90px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px}
+#status{color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+.view{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;overflow-x:auto}canvas{display:block;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:16px;color:var(--muted);font-size:12.5px}.sw{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-2px;margin-right:5px}
+audio{width:100%}p.note{color:var(--muted);margin:0;font-size:12.5px;max-width:80ch}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;width:100%}td,th{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+td.t{white-space:nowrap}.lab{font-weight:600}
+</style></head><body><main>
+<h1>Tvek <small>how certain a Swedish speaker sounds</small></h1>
+<div class="bar">
+  <button id="rec" class="rec">● Record</button>
+  <label class="file">Load audio<input id="file" type="file" accept="audio/*,.wav,.flac,.mp3,.m4a,.ogg"></label>
+  <label class="file ghost">Words (TextGrid/TSV, optional)<input id="words" type="file" accept=".TextGrid,.textgrid,.tsv,.csv,.txt"></label>
+  <label>tier <input id="tier" type="text" placeholder="first"></label>
+  <span id="status">Record yourself (one speaker) or load a file. Without a word file, KB-Whisper finds the words (slow the first time).</span>
+</div>
+<audio id="player" controls></audio>
+<div class="view"><canvas id="cv" height="430"></canvas></div>
+<div class="legend">
+  <span><i class="sw" style="background:var(--cert)"></i>certain</span><span><i class="sw" style="background:var(--unc)"></i>uncertain</span>
+  <span><i class="sw" style="background:var(--nc)"></i>no claim (question, backchannel)</span>
+  <span><svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--curve)" stroke-width="2"/></svg>P(uncertain) after each word</span>
+  <span><svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--curve2)" stroke-width="2" stroke-dasharray="3 2"/></svg>P(certain)</span>
+  <span>click to play from there</span>
+</div>
+<p class="note">Tvek scores one speaker: prosody is normalised over that speaker's utterances, so give it at least ~10 utterances (a minute or more).
+  The curve is causal: the value after a word uses only the words so far. Labels are estimates: on radio interviews Tvek separates certain from
+  uncertain at AUC 0.85, but often calls a long, statement-like question "certain".</p>
+<div class="view" id="tbl"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id); let R = null, wordsText = null, rec = null;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const COL = { certain: "--cert", uncertain: "--unc", no_claim: "--nc" };
+function b64(f32) { const u = new Uint8Array(f32.buffer, f32.byteOffset, f32.byteLength); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+function concat(c) { const n = c.reduce((a, x) => a + x.length, 0), o = new Float32Array(n); let k = 0; for (const x of c) { o.set(x, k); k += x.length; } return o; }
+function wavBlob(x, sr) { const b = new ArrayBuffer(44 + x.length * 2), v = new DataView(b), w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + x.length * 2, true); w(8, "WAVE"); w(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, "data"); v.setUint32(40, x.length * 2, true);
+  for (let i = 0; i < x.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, x[i])) * 32767, true); return new Blob([b], { type: "audio/wav" }); }
+function magma(v) { const s = [[0,0,4],[40,11,84],[101,21,110],[159,42,99],[212,72,66],[245,125,21],[250,193,39],[252,255,164]]; const x = v * 7, i = Math.min(6, Math.floor(x)), f = x - i; return s[i].map((c, k) => c + (s[i + 1][k] - c) * f); }
+async function run(x, sr) {
+  $("status").textContent = `Analysing ${(x.length / sr).toFixed(1)} s …`; const t0 = performance.now();
+  const r = await fetch("/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pcm: b64(x), sr, words: wordsText, tier: $("tier").value.trim() }) });
+  const j = await r.json(); if (!r.ok) { $("status").textContent = "Error: " + (j.error || r.status); return; }
+  R = j; draw(); table();
+  const n = k => j.utterances.filter(u => u.label === k).length;
+  $("status").textContent = `${j.utterances.length} utterances (${n("certain")} certain, ${n("uncertain")} uncertain, ${n("no_claim")} no claim) · ${j.source} · ${((performance.now() - t0) / 1000).toFixed(1)} s`;
+}
+function draw() {
+  const cv = $("cv"), W = Math.max(cv.parentElement.clientWidth - 20, 300), H = 430, dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + "px"; const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+  if (!R) return; const L = 44, PW = W - L - 8, SH = 220, UY = SH + 8, CY = UY + 30, CH = 110, WY = CY + CH + 10, X = t => L + t / R.dur * PW, sp = R.spec;
+  const raw = Uint8Array.from(atob(sp.data), c => c.charCodeAt(0)), img = g.createImageData(sp.frames, sp.bins);
+  for (let f = 0; f < sp.frames; f++) for (let b = 0; b < sp.bins; b++) { const [r, gg, bb] = magma(raw[f * sp.bins + b] / 255), o = ((sp.bins - 1 - b) * sp.frames + f) * 4; img.data[o] = r; img.data[o + 1] = gg; img.data[o + 2] = bb; img.data[o + 3] = 255; }
+  const tmp = document.createElement("canvas"); tmp.width = sp.frames; tmp.height = sp.bins; tmp.getContext("2d").putImageData(img, 0, 0); g.drawImage(tmp, L, 0, PW, SH);
+  for (const u of R.utterances) { const p = u.p[u.label]; g.fillStyle = css(COL[u.label]); g.globalAlpha = 0.25 + 0.75 * Math.min(1, Math.max(0, (p - 0.33) / 0.5));
+    g.fillRect(X(u.start), UY, Math.max(2, X(u.end) - X(u.start)), 22); g.globalAlpha = 1; }
+  g.strokeStyle = css("--line"); g.strokeRect(L, CY, PW, CH); g.fillStyle = css("--muted"); g.font = "11px sans-serif"; g.textAlign = "right";
+  g.fillText("1", L - 4, CY + 9); g.fillText("0", L - 4, CY + CH); g.fillText("utt.", L - 4, UY + 15);
+  for (const [k, col, dash] of [[1, "--curve", []], [0, "--curve2", [4, 3]]]) {
+    g.strokeStyle = css(col); g.lineWidth = 1.8; g.setLineDash(dash);
+    for (const u of R.utterances) { g.beginPath(); u.words.forEach(([s, e], i) => { const y = CY + CH * (1 - u.curve[i][k]); i ? g.lineTo(X(s), y) : g.moveTo(X(s), y); g.lineTo(X(e), y); }); g.stroke(); }
+  }
+  g.setLineDash([]); g.lineWidth = 1; g.textAlign = "center"; g.font = "10.5px sans-serif";
+  for (const u of R.utterances) u.words.forEach(([s, e, w]) => { g.strokeStyle = css("--line"); g.strokeRect(X(s), WY, Math.max(1, X(e) - X(s)), 18);
+    if (X(e) - X(s) > 22) { g.fillStyle = css("--fg"); g.fillText(w, (X(s) + X(e)) / 2, WY + 13); } });
+  g.fillStyle = css("--muted"); g.font = "11px sans-serif"; const step = R.dur > 120 ? 20 : R.dur > 60 ? 10 : R.dur > 20 ? 5 : 1;
+  for (let t = 0; t <= R.dur; t += step) g.fillText(t + " s", X(t), H - 2);
+  const p = $("player"); if (p.currentTime > 0) { g.strokeStyle = css("--fg"); g.beginPath(); g.moveTo(X(p.currentTime), 0); g.lineTo(X(p.currentTime), WY + 18); g.stroke(); }
+  cv.onclick = e => { const r = cv.getBoundingClientRect(), t = (e.clientX - r.left - L) / (r.width - L - 8) * R.dur; if (t >= 0 && t <= R.dur) { p.currentTime = t; p.play(); } };
+}
+function table() {
+  $("tbl").innerHTML = "<table><tr><th>time</th><th>label</th><th>certain</th><th>uncertain</th><th>no claim</th><th>words</th></tr>" + R.utterances.map(u =>
+    `<tr><td class="t">${u.start.toFixed(1)}–${u.end.toFixed(1)}</td><td class="lab" style="color:var(${COL[u.label]})">${u.label.replace("_", " ")}</td><td>${u.p.certain}</td><td>${u.p.uncertain}</td><td>${u.p.no_claim}</td><td>${u.text.replace(/</g, "&lt;")}</td></tr>`).join("") + "</table>";
+}
+$("rec").onclick = async () => {
+  if (rec) { rec.timer && 0; rec.node.disconnect(); rec.stream.getTracks().forEach(t => t.stop()); const x = concat(rec.chunks), sr = rec.ctx.sampleRate; rec.ctx.close(); rec = null;
+    $("rec").textContent = "● Record"; $("player").src = URL.createObjectURL(wavBlob(x, sr)); run(x, sr); return; }
+  try { const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const ctx = new (window.AudioContext || window.webkitAudioContext)(), node = ctx.createScriptProcessor(4096, 1, 1), chunks = [];
+    node.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); ctx.createMediaStreamSource(stream).connect(node); node.connect(ctx.destination);
+    rec = { stream, ctx, node, chunks }; $("rec").textContent = "■ Stop"; $("status").textContent = "Recording … talk for a minute or more, then Stop";
+  } catch (e) { $("status").textContent = "No microphone access (open the page as http://localhost and allow the microphone)."; }
+};
+$("file").onchange = async e => { const f = e.target.files[0]; if (!f) return; $("player").src = URL.createObjectURL(f); $("status").textContent = "Decoding …";
+  try { const ctx = new (window.AudioContext || window.webkitAudioContext)(); const ab = await ctx.decodeAudioData(await f.arrayBuffer()); ctx.close();
+    const x = new Float32Array(ab.length); for (let c = 0; c < ab.numberOfChannels; c++) { const d = ab.getChannelData(c); for (let i = 0; i < x.length; i++) x[i] += d[i] / ab.numberOfChannels; }
+    run(x, ab.sampleRate); } catch (er) { $("status").textContent = "The browser could not decode this file."; } };
+$("words").onchange = async e => { const f = e.target.files[0]; wordsText = f ? await f.text() : null; $("status").textContent = f ? `Words: ${f.name} (used from the next analysis)` : ""; };
+$("player").addEventListener("timeupdate", draw); window.addEventListener("resize", draw);
+</script></body></html>

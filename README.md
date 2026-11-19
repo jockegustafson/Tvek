@@ -18,6 +18,18 @@ start    end      label      p_certain  p_uncertain  p_no_claim  text
 One row per utterance (the words split at pauses of 0.8 s or more, and stretches over 40 words or 20 s at their longest pause);
 `--json` adds the curve per word and the cues behind the label.
 
+## Try it in the browser
+
+```bash
+pip install "tvek[asr] @ git+https://github.com/jockegustafson/Tvek.git"    # [asr]: word times from KB-Whisper when you have no word file
+tvek-demo                                                                  # http://localhost:8767, everything runs on your machine
+```
+
+Record yourself or load a recording of one speaker (a minute or more), optionally with a word file. The page shows the spectrogram, each
+utterance as a band coloured certain / uncertain / no claim (stronger colour = more confident), the running P(uncertain) and P(certain)
+after every word, and a table of the utterances with their probabilities. Without a word file it gets rough word times from
+KB-Whisper (about 3 GB on first use).
+
 ## Run it from Python
 
 ```python

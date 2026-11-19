@@ -4,17 +4,21 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tvek"
-version = "1.0.1"
+version = "1.1.0"
 description = "Tvek: how certain a Swedish speaker sounds, per utterance and word (CertNet)"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = ["numpy", "scipy", "soundfile", "torch>=2.0", "transformers>=4.30", "opensmile"]
 
+[project.optional-dependencies]
+asr = ["accelerate"]
+
 [project.scripts]
 tvek = "tvek.cli:main"
+tvek-demo = "tvek.demo:main"
 
 [tool.setuptools]
 packages = ["tvek"]
 
 [tool.setuptools.package-data]
-tvek = ["weights/*.npz", "weights/*.json"]
+tvek = ["weights/*.npz", "weights/*.json", "demo.html"]
