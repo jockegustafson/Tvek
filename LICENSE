@@ -1,0 +1,7 @@
+Tvek - how certain a Swedish speaker sounds (CertNet)
+Copyright (c) 2026 Joakim Gustafson, KTH Royal Institute of Technology
+
+Code and model weights may be used, copied and modified for NON-COMMERCIAL RESEARCH purposes only, with attribution to this repository.
+The model was trained on Swedish research speech corpora with non-commercial and research-only licences; any use must also respect
+those terms. Commercial use of the weights or of anything derived from them is not permitted.
+THE SOFTWARE AND WEIGHTS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
