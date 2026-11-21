@@ -39,6 +39,7 @@ KB-Whisper (about 3 GB on first use).
 from tvek import CertaintyDetector
 
 det = CertaintyDetector()                                      # GPU if there is one, Apple silicon (mps), else CPU
+# CertaintyDetector(model="v3") for the 1.0-1.1 model; CertaintyDetector(weights_dir=...) for a model exported by tools/export_weights.py
 words = [("jag", 12.31, 12.40), ("tror", 12.40, 12.62), ...]   # (word, start s, end s) of one speaker, e.g. from a forced aligner
 for u in det.score_file("interview.wav", words, channel=0):
     print(u["start"], u["end"], u["label"], u["p"], u["text"])

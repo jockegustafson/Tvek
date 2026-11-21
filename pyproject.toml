@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tvek"
-version = "1.2.0"
+version = "1.2.1"
 description = "Tvek: how certain a Swedish speaker sounds, per utterance and word (CertNet)"
 readme = "README.md"
 requires-python = ">=3.9"

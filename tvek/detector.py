@@ -17,9 +17,14 @@ import torch
 from .model import CL, NOZ, SR, Features, Net
 
 
-def _load(model=None):
-    """model None = the default (MANIFEST.json, CertNet v7), "v3" = MANIFEST_certnet_v3.json; the manifest names the weight files"""
-    ref = resources.files("tvek") / "weights"; man = json.loads((ref / ("MANIFEST.json" if model in (None, "v7", "certnet_v7") else f"MANIFEST_certnet_{model.replace('certnet_', '')}.json")).read_text())
+def _load(model=None, weights_dir=None):
+    """model None = the default (MANIFEST.json, CertNet v7), "v3" = MANIFEST_certnet_v3.json; the manifest names the weight files;
+    weights_dir: another folder with a MANIFEST.json and the files it names (e.g. a model exported by tools/export_weights.py)"""
+    if weights_dir is not None:
+        from pathlib import Path
+        ref = Path(weights_dir); model = None
+    else: ref = resources.files("tvek") / "weights"
+     man = json.loads((ref / ("MANIFEST.json" if model in (None, "v7", "certnet_v7") else f"MANIFEST_certnet_{model.replace('certnet_', '')}.json")).read_text())
     raw = (ref / man.get("npz", "certnet_v3.npz")).read_bytes(); cue = (ref / man.get("cue", "cue_model_v3.json")).read_bytes()
     if hashlib.sha256(raw).hexdigest() != man["npz_sha256"] or hashlib.sha256(cue).hexdigest() != man["cue_sha256"]:
         raise RuntimeError("tvek weights do not match MANIFEST.json")
@@ -72,9 +77,9 @@ def load_audio(path, channel=None):
 
 
 class CertaintyDetector:
-    def __init__(self, device=None, model=None):
+    def __init__(self, device=None, model=None, weights_dir=None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-        self.manifest, seeds, cue = _load(model); self.pcols = self.manifest["pcols"]
+        self.manifest, seeds, cue = _load(model, weights_dir); self.pcols = self.manifest["pcols"]
         self.nets = []
         for sd in seeds:
             n = Net(len(self.pcols)); n.load_state_dict(sd); self.nets.append(n.to(self.device).eval())
