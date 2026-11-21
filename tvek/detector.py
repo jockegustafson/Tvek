@@ -24,7 +24,7 @@ def _load(model=None, weights_dir=None):
         from pathlib import Path
         ref = Path(weights_dir); model = None
     else: ref = resources.files("tvek") / "weights"
-     man = json.loads((ref / ("MANIFEST.json" if model in (None, "v7", "certnet_v7") else f"MANIFEST_certnet_{model.replace('certnet_', '')}.json")).read_text())
+    man = json.loads((ref / ("MANIFEST.json" if model in (None, "v7", "certnet_v7") else f"MANIFEST_certnet_{model.replace('certnet_', '')}.json")).read_text())
     raw = (ref / man.get("npz", "certnet_v3.npz")).read_bytes(); cue = (ref / man.get("cue", "cue_model_v3.json")).read_bytes()
     if hashlib.sha256(raw).hexdigest() != man["npz_sha256"] or hashlib.sha256(cue).hexdigest() != man["cue_sha256"]:
         raise RuntimeError("tvek weights do not match MANIFEST.json")
