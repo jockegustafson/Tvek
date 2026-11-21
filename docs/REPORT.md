@@ -1,6 +1,7 @@
 # Tvek: detecting how certain a Swedish speaker sounds
 
-Joakim Gustafson (KTH Speech, Music and Hearing) with Claude Code. Status 2026-11-19. Model: CertNet v3 of the KTH svtx toolkit.
+Joakim Gustafson (KTH Speech, Music and Hearing) with Claude Code. Status 2026-11-21. Model: CertNet v7 of the KTH svtx toolkit (Tvek 1.2;
+Tvek 1.0–1.1 shipped CertNet v3, still available with `model="v3"`).
 
 ## Abstract
 
@@ -12,6 +13,14 @@ chosen by active learning).
 On held-out recording sessions it separates certain from uncertain utterances at **AUC 0.83** (cross-validated by session), against 0.62
 for text-only LLM judgements; on radio interviews, a domain it never saw, at **AUC 0.85** (random sample 0.91). The three-way label is
 weaker (50 % correct on interviews), and the labels themselves are noisy: one listener repeated 8 of 15 earlier labels.
+
+**Version 1.2 (CertNet v7)** adds a third speech style, a three-party estimation quiz game recorded with a far-field microphone array
+(Swedish and English), with 300 utterances tagged by ear and weak labels from the dialogue structure for the other 5,100 utterances. In
+cross-validation with one recording held out per fold it is the best model on the face-to-face dialogue (AUC 0.817, 0.822 with the cue
+model), close to the interview-trained baseline on the interviews (0.848 with the cue model against 0.855) and equal to it on the quiz
+game (0.696); a variant trained on the quiz tags only is better on the quiz game (0.721; English 0.60 against 0.54) and is used there
+(section 6). Nothing besides the voice helped on the quiz game: dialogue structure, cue words, laughter, facial expression, gaze aversion
+and creak added to CertNet did not raise the cross-validated AUC.
 
 ## 1. The task
 
@@ -48,7 +57,9 @@ davidorp/CogniAlign); Monte Carlo dropout (Gal & Ghahramani, 2016) and BALD (Hou
 | --- | --- | --- | --- |
 | face-to-face dialogue corpus | Swedish dialogue, close-talk microphones, one channel per speaker | 12,500 utterances (all speakers' utterances of 3–40 words chosen for certainty labelling) | training (soft targets) |
 | Tags by ear, rounds 1–4 | one listener, certain / uncertain / no claim | 600 utterances (430 certain or uncertain) | training (weight 20) and cross-validated evaluation |
-| Tags by ear, round 5 | the same listener, Swedish radio interview programmes and a radio discussion programme | 120 utterances (73 certain or uncertain) + 15 hidden repeats | test only |
+| Tags by ear, round 5 | the same listener, Swedish radio interview programmes and a radio discussion programme | 120 utterances (73 certain or uncertain) + 15 hidden repeats | test (v3); training and cross-validation (v6, v7) |
+| Three-party estimation quiz game | 5 games of about 55 min, 3 players + a game master on a loudspeaker, 2013 lab recordings; 2 games Swedish, 3 English; one beam per player from a 7-microphone array (far field, other players audible) | 5,423 player utterances | weak labels (v7, weight 1) |
+| Tags by ear, rounds 6–7 | the same listener, quiz game, by ear from the player's beam (+ 4 s of room context on demand), transcript hidden unless asked | 300 utterances (238 certain or uncertain: 170 uncertain) | training (weight 20) and cross-validation (v7) |
 
 **Soft targets** for the untagged utterances mix (a) the votes of three text LLMs (Qwen 27B, Gemma 31B, ChatGPT) given the utterance
 and its dialogue context, (b) a cue model (multinomial logistic regression on 14 utterance-end cues: last word a function word or a
@@ -115,19 +126,80 @@ times; seven moved to *uncertain* (three from *certain*, four from *no claim*). 
 in general (Wiechmann et al., 2023, found novice agreement around κ = 0.2 that a short explanation did not raise), and these numbers
 bound what any model can reach on such labels.
 
-## 6. Limitations
+## 6. Version 1.2: CertNet v7 (2026-11-20/21)
+
+**Why another domain.** The quiz game was designed to elicit uncertainty: three players must agree on numerical estimates (the area of
+the world's 8th largest country, a year, a speed) within about three minutes and then give them to a game master. It is task-oriented,
+multi-party, partly English and recorded far-field, so it tests how far a model trained on face-to-face Swedish dialogue carries over,
+and it adds labelled data of a kind the dialogue corpus has little of (proposals, estimates, agreements).
+
+**Features.** The same features as at inference (`CertNet.features`), computed on each player's own microphone-array beam; the prosody
+z-scored over all of that player's utterances (as for the interviews). Utterances: a player's words (KB-Whisper with fillers for
+Swedish, CrisperWhisper for English) split at pauses of 0.8 s or more.
+
+**Tags.** Rounds 6 and 7, 150 utterances each, 30 per game, utterances of three words or more. Round 6: per game 12 the weak labels
+called uncertain, 12 certain, 6 no claim, half of each where the weak-label sources disagreed most, half at random. Round 7, by active
+learning on the then current model: 12 most likely certain (certain utterances are rare), 10 nearest the decision boundary, 4 where the
+model and the dialogue structure or cue words disagreed, 4 at random. The listener tagged 170 of the 238 claims uncertain: in this game
+even agreements and the final answers are mostly said uncertainly. The round-7 picks the model thought most likely certain were tagged
+certain 30 % of the time against 13 % for the others.
+
+**Weak labels** (for the untagged quiz utterances): a log-odds sum of hand-set contributions: game phase and position in the
+discussion; proposals of a value (initial, revised, final, and whether it was the team's eventual answer), agreements, giving the answer
+and its correctness (from a local LLM's reading of each round: the question, every proposal, agreements, the team's answer and the
+correct answer read by the game master, converted to numbers; correct = within a factor of 10^0.1); fillers, hedges and boosters;
+CertNet v6 on the Swedish games only; frown events (Py-Feat AU4); eye-tracker gaze aversion; laughter right after the utterance. Only
+these hand-set weights are used as training targets: weights refitted on the tags would carry tag information across the folds.
+
+**Cross-validation.** 5 folds: the dialogue-corpus sessions as for v3, every 5th interview recording, and one quiz game per fold, so
+every number below comes from recordings the model never trained on; 3 seeds averaged; AUC certain vs uncertain on the tags.
+
+| Configuration (same folds) | Dialogue (430) | Interviews (73) | Quiz game (238) | Quiz, Swedish | Quiz, English |
+| --- | --- | --- | --- | --- | --- |
+| v6: the v3 recipe + the interview tags | 0.799 (0.815) | **0.807 (0.855)** | 0.696 | 0.748 | 0.535 |
+| v7_tags: + the quiz tags (weight 20) | 0.812 (0.817) | 0.776 (0.845) | **0.721** | **0.752** | **0.604** |
+| **v7 = v7_weak1: + the quiz tags + the weak labels (weight 1)** | **0.817 (0.822)** | 0.793 (0.848) | 0.696 | 0.746 | 0.552 |
+
+(In parentheses: averaged with the cue model, as Tvek outputs.) The quiz tags help on the quiz game, almost all of it on English; the
+weak labels help the dialogue corpus a little and cancel the quiz gain. **Tvek 1.2 ships v7_weak1**, the best on Swedish two-person
+dialogue and the closest to v6 elsewhere; v7_tags is used for the quiz game itself. A first round with 150 tags and weak labels refitted
+on those tags had shown 0.73–0.74 on the quiz game: the refit leaked tag information across the folds, and with clean weak labels the
+number fell to the table's.
+
+**What did not help on the quiz game** (238 tagged claims, CertNet's out-of-fold score + one group, logistic regression cross-validated by
+game; 95 % bootstrap interval of the difference): the position in the discussion +0.005 (−0.02..+0.03); creak (Knarr word detector:
+the last word's score, the fillers' maximum) +0.008 (−0.02..+0.04); laughter −0.013; facial expression and gaze (AU4, brow raise,
+measured gaze aversion) −0.012; the dialogue structure −0.05; everything together −0.09 (−0.15..−0.02). With the weights refitted on
+the 150 first tags, the structural and lexical cues even took unexpected signs (hedges counted towards certain): in this game nearly
+everything is uncertain, so cues of uncertainty separate little.
+
+**Creak.** On all 38,482 player words (Knarr detector; 15 % scored creaky): a creaky last word and more creaky words go with
+*certain* utterances (AUC 0.40–0.42 for uncertain, i.e. less creak there), as phrase-final creak marks a finished statement; creaky
+fillers go with *uncertain* (0.61; Swedish 0.79 on 55 utterances). CertNet already carries most of it.
+
+**Faces on the dialogue corpus.** On 90 tagged dialogue utterances with synced camera video (19 sessions), facial features (MediaPipe
+blendshapes, Py-Feat action units, head motion; 84 features) did not help as a whole (0.50–0.62 alone, no gain with CertNet), but
+eye-in-head gaze aversion during the utterance alone reached AUC 0.68–0.73, independent of CertNet (r = −0.01): CertNet + gaze aversion
+0.77 against 0.69 in the same cross-validation (difference against CertNet's raw score +0.04, 95 % interval −0.04..+0.12). Promising,
+not yet shown; it needs more tagged utterances with video.
+
+## 7. Limitations
 
 - One listener's labels; the model learns that listener's percept, and the labels are noisy (above).
-- Trained on one corpus of face-to-face dialogue with close-talk microphones; interviews were tested, other speech styles were not.
+- Trained on face-to-face dialogue (close-talk), radio interviews and a far-field quiz game; other speech styles are untested. English
+  is supported only as far as the quiz game's English tags go (AUC 0.55–0.60): Tvek is a Swedish model.
 - The prosody is normalised per speaker over the utterances given, so short inputs (fewer than ~10 utterances) are unreliable.
 - Word times are needed; the demo's KB-Whisper word times are rough.
 - Questions and statements with question function are the weakest point of the three-way label.
 
-## 7. Reproduction
+## 8. Reproduction
 
 Training code and the full experiment record are in the KTH svtx repository (`research/certainty/`, TTS dialogue report sections 37,
-42–44 and 44.9; technical report section 7.1). The package here contains the inference code, the weights (three seeds + cue model,
-hash-checked) and `tools/export_weights.py`.
+42–44 and 44.9; technical report section 7.1). CertNet v7: `cert_gg_feats.py` (quiz-game features), `cert_net7.py cv` (the table of
+section 6) and `cert_net7.py final v7_weak1`; the quiz-game data, tags, weak labels and the round extraction are in the quiz corpus
+repository. The package here contains the inference code, the weights (three seeds + cue model, hash-checked; `MANIFEST.json` = v7,
+`MANIFEST_certnet_v3.json` = v3) and `tools/export_weights.py`, which renames the later trainer's stream-named keys (`a.vox.*` →
+`a.*`); exported v7 weights reproduce the trainer's probabilities to 1e-7.
 
 ## References
 
@@ -151,6 +223,8 @@ hash-checked) and `tools/export_weights.py`.
 - Pei, J., & Jurgens, D. (2021). Measuring sentence-level and aspect-level (un)certainty in science communications. *EMNLP 2021*.
 - Pon-Barry, H., & Shieber, S. M. (2011). Recognizing uncertainty in speech. *EURASIP Journal on Advances in Signal Processing*, 2011.
 - Smith, V. L., & Clark, H. H. (1993). On the course of answering questions. *Journal of Memory and Language*, 32(1), 25–38.
+- Cheong, J. H., Jolly, E., Xie, T., Byrne, S., Kenney, M., & Chang, L. J. (2023). Py-Feat: Python facial expression analysis
+  toolbox. *Affective Science*, 4, 781–796.
 - Wiechmann, J., Rautenberg, F., Wagner, P., & Häb-Umbach, R. (2023). Explaining voice characteristics to novice voice practitioners:
   how successful is it? *ICPhS 2023*, 4224–4228.
 - Swerts, M., & Krahmer, E. (2005). Audiovisual prosody and feeling of knowing. *Journal of Memory and Language*, 53(1), 81–94.

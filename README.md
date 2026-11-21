@@ -3,8 +3,11 @@
 **How certain a Swedish speaker sounds**, per utterance and word by word. Tvek labels each utterance **certain**, **uncertain**
 (hesitant, unsure, guessing, trailing off) or **no claim** (a question, a backchannel, a greeting), and gives a running curve over the
 words, so you can see where the doubt sets in. It listens to the voice, not only the words: on Swedish dialogue sessions it has not
-been trained on, it separates certain from uncertain utterances at **AUC 0.83** (cross-validated by session), where text-only LLM
+been trained on, it separates certain from uncertain utterances at **AUC 0.82** (cross-validated by session), where text-only LLM
 judgements of the same kind of utterances reached 0.62. *Tvek* is Swedish for hesitation.
+
+**Version 1.2** (2026-11-21) ships **CertNet v7**, trained on face-to-face dialogue, radio interviews and a far-field three-party quiz
+game (300 more tags by ear + weak labels); `--model v3` (Python: `CertaintyDetector(model="v3")`) gives the model of versions 1.0–1.1.
 
 ```bash
 pip install "tvek @ git+https://github.com/jockegustafson/Tvek.git"
@@ -59,12 +62,14 @@ channel:
 
 A 2-layer causal transformer turns these into the three classes at every word (three seeds averaged); the utterance label averages
 the TAIL token with a small cue model (logistic regression on end cues such as a final function word, a final filler, voice trailing
-past the last word, the final pitch slope). The model is **CertNet v3** of the KTH svtx toolkit.
+past the last word, the final pitch slope). The model is **CertNet v7** of the KTH svtx toolkit (same network as v3, more data).
 
 ## Training and evaluation
 
 - **Data:** 12,500 utterances of Swedish face-to-face dialogue (lab recordings, KTH) with soft targets from text-LLM votes, a cue model and an
-  audio-LLM teacher, plus 600 utterances tagged by ear in four rounds (rounds 3–4 chosen by active learning), weighted 20×.
+  audio-LLM teacher, plus 600 utterances tagged by ear in four rounds (rounds 3–4 chosen by active learning), weighted 20×; since 1.2 also
+  117 tagged radio-interview utterances and a three-party quiz game (5,423 utterances, Swedish and English, far-field): 300 tags by ear
+  (weight 20) and weak labels from the dialogue structure for the rest (weight 1).
 - **Evaluation:** 5-fold cross-validation by recording session, AUC certain vs uncertain on the 430 tagged certain / uncertain items:
 
 | Model | AUC |
@@ -75,7 +80,16 @@ past the last word, the final pitch slope). The model is **CertNet v3** of the K
 | **Tvek = CertNet + cue model** | **0.83** |
 
 Each tagging round added about 0.02; other audio encoders (self-supervised VoxRex, the KB-Whisper encoder, emotion dimensions) did not
-improve it.
+improve it. (The table is v3 in its own cross-validation.)
+
+**CertNet v7 (Tvek 1.2)**, cross-validated with one recording held out per fold (dialogue sessions, interview recordings, quiz games), AUC
+certain vs uncertain, network (with the cue model):
+
+| Model, same folds | Dialogue (430 tags) | Interviews (73) | Quiz game (238) |
+| --- | --- | --- | --- |
+| v3 recipe + interview tags (v6) | 0.799 (0.815) | 0.807 (0.855) | 0.696 |
+| **v7 (Tvek 1.2)** | **0.817 (0.822)** | 0.793 (0.848) | 0.696 |
+| v7 trained on the quiz tags only (used for the quiz game) | 0.812 (0.817) | 0.776 (0.845) | 0.721 |
 
 **Radio interviews** (never trained on): 120 utterances tagged by ear from Swedish radio interview programmes
 and a radio discussion programme, half where the model was least sure and half at random (2026-11-19):

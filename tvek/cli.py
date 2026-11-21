@@ -34,10 +34,10 @@ def read_words(path, tier=None):
 def main():
     ap = argparse.ArgumentParser(description="Tvek: how certain a Swedish speaker sounds, per utterance")
     ap.add_argument("audio"); ap.add_argument("words"); ap.add_argument("--channel", type=int); ap.add_argument("--tier")
-    ap.add_argument("--gap", type=float, default=0.8); ap.add_argument("--device"); ap.add_argument("-o", "--out"); ap.add_argument("--json")
+    ap.add_argument("--gap", type=float, default=0.8); ap.add_argument("--device"); ap.add_argument("--model", choices=["v7", "v3"], default="v7"); ap.add_argument("-o", "--out"); ap.add_argument("--json")
     a = ap.parse_args()
     from . import CertaintyDetector
-    res = CertaintyDetector(a.device).score_file(a.audio, read_words(a.words, a.tier), channel=a.channel, gap=a.gap)
+    res = CertaintyDetector(a.device, a.model).score_file(a.audio, read_words(a.words, a.tier), channel=a.channel, gap=a.gap)
     f = open(a.out, "w", newline="") if a.out else sys.stdout; w = csv.writer(f, delimiter="\t")
     w.writerow(["start", "end", "label", "p_certain", "p_uncertain", "p_no_claim", "text"])
     for r in res: w.writerow([f'{r["start"]:.3f}', f'{r["end"]:.3f}', r["label"], r["p"]["certain"], r["p"]["uncertain"], r["p"]["no_claim"], r["text"]])

@@ -1,5 +1,5 @@
-"""Tvek: how certain a Swedish speaker sounds, per utterance, with a running curve per word (CertNet v3).
-  det = CertaintyDetector()                                   # cuda, mps or cpu, whichever is there
+"""Tvek: how certain a Swedish speaker sounds, per utterance, with a running curve per word (CertNet v7; CertNet v3 with model="v3").
+  det = CertaintyDetector()                                   # cuda, mps or cpu, whichever is there; model="v3" for the 1.0/1.1 model
   det.score_file("interview.wav", words, channel=0)           # words: [(word, start, end)] of ONE speaker
   det.score(x16, utterances)                                  # x16: 16 kHz mono; utterances: [[(start, end, word), ...], ...]
 Utterances: the words split where the pause between two words is >= gap (0.8 s). Prosody is z-scored over all utterances of the call,
@@ -17,9 +17,10 @@ import torch
 from .model import CL, NOZ, SR, Features, Net
 
 
-def _load():
-    ref = resources.files("tvek") / "weights"; man = json.loads((ref / "MANIFEST.json").read_text())
-    raw = (ref / "certnet_v3.npz").read_bytes(); cue = (ref / "cue_model_v3.json").read_bytes()
+def _load(model=None):
+    """model None = the default (MANIFEST.json, CertNet v7), "v3" = MANIFEST_certnet_v3.json; the manifest names the weight files"""
+    ref = resources.files("tvek") / "weights"; man = json.loads((ref / ("MANIFEST.json" if model in (None, "v7", "certnet_v7") else f"MANIFEST_certnet_{model.replace('certnet_', '')}.json")).read_text())
+    raw = (ref / man.get("npz", "certnet_v3.npz")).read_bytes(); cue = (ref / man.get("cue", "cue_model_v3.json")).read_bytes()
     if hashlib.sha256(raw).hexdigest() != man["npz_sha256"] or hashlib.sha256(cue).hexdigest() != man["cue_sha256"]:
         raise RuntimeError("tvek weights do not match MANIFEST.json")
     z = np.load(io.BytesIO(raw))
@@ -71,9 +72,9 @@ def load_audio(path, channel=None):
 
 
 class CertaintyDetector:
-    def __init__(self, device=None):
+    def __init__(self, device=None, model=None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-        self.manifest, seeds, cue = _load(); self.pcols = self.manifest["pcols"]
+        self.manifest, seeds, cue = _load(model); self.pcols = self.manifest["pcols"]
         self.nets = []
         for sd in seeds:
             n = Net(len(self.pcols)); n.load_state_dict(sd); self.nets.append(n.to(self.device).eval())
