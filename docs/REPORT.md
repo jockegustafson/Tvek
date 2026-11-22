@@ -1,6 +1,6 @@
 # Tvek: detecting how certain a Swedish speaker sounds
 
-Joakim Gustafson (KTH Speech, Music and Hearing) with Claude Code. Status 2026-11-21. Model: CertNet v7 of the KTH svtx toolkit (Tvek 1.2;
+Joakim Gustafson (KTH Speech, Music and Hearing) with Claude Code. Status 2026-11-22. Model: CertNet v7 of the KTH svtx toolkit (Tvek 1.2;
 Tvek 1.0–1.1 shipped CertNet v3, still available with `model="v3"`).
 
 ## Abstract
@@ -182,6 +182,29 @@ blendshapes, Py-Feat action units, head motion; 84 features) did not help as a w
 eye-in-head gaze aversion during the utterance alone reached AUC 0.68–0.73, independent of CertNet (r = −0.01): CertNet + gaze aversion
 0.77 against 0.69 in the same cross-validation (difference against CertNet's raw score +0.04, 95 % interval −0.04..+0.12). Promising,
 not yet shown; it needs more tagged utterances with video.
+
+## 6.1 Uncertainty and creak (2026-11-21/22)
+
+Creak is often heard in hesitant speech, so CertNet v7 was used to choose words for a round of creak labelling by ear (the creak detector
+Knarr's round 3): from face-to-face dialogue, radio interviews, the quiz game and podcasts, 236,491 scored words, sampled as the last
+words of the most uncertain utterances (45), of the most certain ones (45), fillers in uncertain utterances (35), utterance-medial words of
+uncertain utterances (25), random words (25) and 15 hidden repeats; at most 3 words per person. One listener labelled the 190 words on a
+page with the waveform and glottal pulses, spectrogram, pitch and period plots and half-speed playback (58 creaky, 127 not, 5 unsure; the
+15 repeats got the same label).
+
+| Group | Creaky |
+| --- | --- |
+| fillers in uncertain utterances | 51 % |
+| last word of an uncertain utterance | 33 % |
+| last word of a certain utterance | 28 % |
+| medial word of an uncertain utterance | 28 % |
+| random word | 4 % |
+
+Creak is far more common at utterance ends and in fillers than elsewhere, but at utterance ends CertNet's p(uncertain) does not separate
+creaky from modal words (AUC 0.49): an uncertain utterance does not end in creak more often than a certain one. This agrees with section 6,
+where creak scores added to CertNet did not help, and with the creak detector's later finding that creak at phrase ends is predicted by
+the prosody leading into the word and by who is speaking, not by an estimated lung state (Knarr's docs/REPORT.md). Creak is therefore not
+used as a certainty cue.
 
 ## 7. Limitations
 
